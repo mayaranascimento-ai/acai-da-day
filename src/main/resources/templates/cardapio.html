@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cardápio - Açaí da Day</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f5fa; }
+        .navbar-acai { background-color: #4a148c; }
+        .btn-acai { background-color: #6a1b9a; color: white; }
+        .btn-acai:hover { background-color: #4a148c; color: white; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark navbar-acai mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/cardapio">🍇 Açaí da Day</a>
+        <div class="d-flex gap-2 align-items-center">
+            <a sec:authorize="isAuthenticated()" href="/cliente/meus-pedidos" class="btn btn-outline-light btn-sm">Meus Pedidos</a>
+            <a sec:authorize="hasAnyRole('ADMIN', 'ATENDENTE')" href="/painel/pedidos" class="btn btn-warning btn-sm fw-bold">Painel Loja</a>
+            <a sec:authorize="!isAuthenticated()" href="/login" class="btn btn-light btn-sm fw-bold">Entrar / Cadastrar</a>
+            <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post" class="m-0">
+                <button class="btn btn-outline-light btn-sm" type="submit">Sair</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h4 class="fw-bold mb-3">1. Escolha seu Açaí</h4>
+            <div class="row g-3">
+                <div class="col-md-6" th:each="prod : ${produtos}">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <h5 class="card-title fw-bold mb-1" th:text="${prod.nome}">Açaí</h5>
+                                <span class="badge bg-secondary" th:text="${prod.tamanho}">500ml</span>
+                            </div>
+                            <p class="card-text text-muted small" th:text="${prod.descricao}">Descrição</p>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="fs-5 fw-bold text-success">R$ <span th:text="${#numbers.formatDecimal(prod.preco, 1, 2)}">0,00</span></span>
+                                <button type="button" class="btn btn-acai btn-sm"
+                                        th:data-id="${prod.id}"
+                                        th:data-nome="${prod.nome + ' (' + prod.tamanho + ')'}"
+                                        th:data-preco="${prod.preco}"
+                                        onclick="abrirModalAdicionais(this)">
+                                    + Montar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card shadow border-0">
+                <div class="card-header bg-dark text-white fw-bold">🛒 Seu Carrinho</div>
+                <div class="card-body">
+                    <div id="lista-carrinho" class="mb-3">
+                        <p class="text-muted text-center my-3">Seu carrinho está vazio.</p>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between fs-5 fw-bold mb-3">
+                        <span>Total:</span>
+                        <span class="text-success" id="total-carrinho">R$ 0.00</span>
+                    </div>
+
+                    <div sec:authorize="!isAuthenticated()" class="alert alert-warning text-center">
+                        Faça <a href="/login" class="fw-bold">login</a> ou <a href="/cadastro" class="fw-bold">cadastre-se</a> para finalizar seu pedido!
+                    </div>
+
+                    <form sec:authorize="isAuthenticated()" th:action="@{/cliente/finalizar-pedido}" method="post" onsubmit="return validarEnvio()">
+                        <input type="hidden" name="carrinhoJson" id="carrinhoJson">
+
+                        <div class="mb-2">
+                            <label class="form-label fw-bold small">Endereço para Entrega (ou Retirada)</label>
+                            <input type="text" name="enderecoEntrega" class="form-control form-control-sm" required placeholder="Rua, número, bairro ou Retirar na loja">
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label fw-bold small">Forma de Pagamento</label>
+                            <select name="formaPagamento" id="formaPagamento" class="form-select form-select-sm" onchange="atualizarDicaPagamento()">
+                                <option value="Pix">Pix</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Cartão">Cartão (Crédito/Débito)</option>
+                                <option value="Pagamento Dividido">Pagamento Dividido (Ex: Dinheiro + Pix)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small" id="labelDetalhes">Observação / Troco / Valores divididos</label>
+                            <input type="text" name="detalhesPagamento" id="detalhesPagamento" class="form-control form-control-sm" placeholder="Enviar comprovante no WhatsApp">
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 fw-bold">Finalizar Pedido e Ir para WhatsApp</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAdicionais" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalProdutoTitulo">Personalizar Açaí</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-bold">Escolha os Adicionais:</label>
+                <div class="form-check" th:each="ad : ${adicionais}">
+                    <input class="form-check-input check-adicional" type="checkbox"
+                           th:value="${ad.id}"
+                           th:data-nome="${ad.nome}"
+                           th:data-preco="${ad.preco}"
+                           th:id="${'ad_' + ad.id}">
+                    <label class="form-check-label" th:for="${'ad_' + ad.id}">
+                        <span th:text="${ad.nome}">Leite</span> (+ R$ <span th:text="${#numbers.formatDecimal(ad.preco, 1, 2)}">2,00</span>)
+                    </label>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label fw-bold">Quantidade:</label>
+                    <input type="number" id="modalQuantidade" class="form-control" value="1" min="1" max="20">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-acai" onclick="confirmarItemCarrinho()">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let carrinho = [];
+    let produtoAtual = null;
+    let modalObj = null;
+
+    function abrirModalAdicionais(btn) {
+        produtoAtual = {
+            id: btn.getAttribute('data-id'),
+            nome: btn.getAttribute('data-nome'),
+            preco: parseFloat(btn.getAttribute('data-preco'))
+        };
+        document.getElementById('modalProdutoTitulo').innerText = produtoAtual.nome;
+        document.getElementById('modalQuantidade').value = 1;
+        document.querySelectorAll('.check-adicional').forEach(c => c.checked = false);
+        modalObj = new bootstrap.Modal(document.getElementById('modalAdicionais'));
+        modalObj.show();
+    }
+
+    function confirmarItemCarrinho() {
+        let adicionaisIds = [];
+        let adicionaisNomes = [];
+        let somaAdicionais = 0;
+
+        document.querySelectorAll('.check-adicional:checked').forEach(chk => {
+            adicionaisIds.push(chk.value);
+            adicionaisNomes.push(chk.getAttribute('data-nome'));
+            somaAdicionais += parseFloat(chk.getAttribute('data-preco'));
+        });
+
+        let qtd = parseInt(document.getElementById('modalQuantidade').value) || 1;
+        let precoUnitarioTotal = produtoAtual.preco + somaAdicionais;
+
+        carrinho.push({
+            produtoId: produtoAtual.id,
+            nome: produtoAtual.nome,
+            adicionaisIds: adicionaisIds,
+            adicionaisNomes: adicionaisNomes,
+            quantidade: qtd,
+            subtotal: precoUnitarioTotal * qtd
+        });
+
+        modalObj.hide();
+        renderizarCarrinho();
+    }
+
+    function removerItem(index) {
+        carrinho.splice(index, 1);
+        renderizarCarrinho();
+    }
+
+    function renderizarCarrinho() {
+        const div = document.getElementById('lista-carrinho');
+        if (carrinho.length === 0) {
+            div.innerHTML = '<p class="text-muted text-center my-3">Seu carrinho está vazio.</p>';
+            document.getElementById('total-carrinho').innerText = 'R$ 0.00';
+            return;
+        }
+
+        let html = '';
+        let total = 0;
+        carrinho.forEach((item, idx) => {
+            total += item.subtotal;
+            let ads = item.adicionaisNomes.length > 0 ? `<br><small class="text-muted">+ ${item.adicionaisNomes.join(', ')}</small>` : '';
+            html += `
+                <div class="d-flex justify-content-between align-items-start border-bottom py-2">
+                    <div>
+                        <strong>${item.quantidade}x ${item.nome}</strong>${ads}
+                    </div>
+                    <div class="text-end">
+                        <span class="fw-bold">R$ ${item.subtotal.toFixed(2)}</span>
+                        <button type="button" class="btn btn-sm text-danger p-0 ms-2" onclick="removerItem(${idx})">✕</button>
+                    </div>
+                </div>`;
+        });
+        div.innerHTML = html;
+        document.getElementById('total-carrinho').innerText = 'R$ ' + total.toFixed(2);
+    }
+
+    function atualizarDicaPagamento() {
+        const tipo = document.getElementById('formaPagamento').value;
+        const input = document.getElementById('detalhesPagamento');
+        if (tipo === 'Dinheiro') input.placeholder = 'Ex: Troco para R$ 50,00 (ou sem troco)';
+        else if (tipo === 'Pix') input.placeholder = 'Enviar comprovante pelo WhatsApp';
+        else if (tipo === 'Cartão') input.placeholder = 'Ex: Débito ou Crédito';
+        else input.placeholder = 'Ex: R$ 10,00 em Dinheiro + R$ 8,00 no Pix';
+    }
+
+    function validarEnvio() {
+        if (carrinho.length === 0) {
+            alert('Adicione pelo menos um açaí ao carrinho!');
+            return false;
+        }
+        document.getElementById('carrinhoJson').value = JSON.stringify(carrinho);
+        return true;
+    }
+</script>
+</body>
+</html>

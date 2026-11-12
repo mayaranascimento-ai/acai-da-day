@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Meus Pedidos - Açaí da Day</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f5fa; }
+        .navbar-acai { background-color: #4a148c; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark navbar-acai mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/cardapio">🍇 Açaí da Day</a>
+        <a href="/cardapio" class="btn btn-light btn-sm fw-bold">+ Novo Pedido</a>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    <h4 class="fw-bold mb-3">Meus Pedidos</h4>
+
+    <div th:if="${#lists.isEmpty(pedidos)}" class="alert alert-info">
+        Você ainda não realizou nenhum pedido. <a href="/cardapio" class="fw-bold">Ir para o cardápio</a>.
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6" th:each="ped : ${pedidos}">
+            <div class="card shadow-sm border-0">
+                <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                    <strong>Pedido #<span th:text="${ped.id}">1</span></strong>
+                    <span class="badge bg-primary" th:text="${ped.status}">PENDENTE</span>
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2" th:text="${#temporals.format(ped.dataHora, 'dd/MM/yyyy HH:mm')}">Data</small>
+                    <ul class="list-unstyled mb-2">
+                        <li th:each="item : ${ped.itens}">
+                            <span th:text="${item.quantidade + 'x ' + item.produto.nome + ' (' + item.produto.tamanho + ')'}"></span>
+                            <small class="text-muted d-block ms-3" th:if="${!#lists.isEmpty(item.adicionais)}">
+                                + <span th:each="ad, stat : ${item.adicionais}" th:text="${ad.adicional.nome + (!stat.last ? ', ' : '')}"></span>
+                            </small>
+                        </li>
+                    </ul>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between">
+                        <span class="small text-muted" th:text="${ped.formaPagamento}">Pix</span>
+                        <strong class="text-success">R$ <span th:text="${#numbers.formatDecimal(ped.valorTotal, 1, 2)}">0,00</span></strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
