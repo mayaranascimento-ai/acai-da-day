@@ -1,10 +1,280 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
-    <title>Açaí da Day</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Açaí da Day — Cardápio Digital</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .bg-roxo { background-color: #4a148c; }
+        .btn-roxo { background-color: #6a1b9a; color: #fff; }
+        .btn-roxo:hover { background-color: #4a148c; color: #fff; }
+        .badge-cota { background-color: #f3e5f5; color: #4a148c; border: 1px solid #ce93d8; }
+    </style>
 </head>
-<body>
-    <h1>Açaí da Day - Sistema Iniciado com Sucesso!</h1>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-roxo shadow-sm">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">🍇 Açaí da Day</a>
+        <div class="d-flex gap-2">
+            <a sec:authorize="isAnonymous()" href="/login" class="btn btn-outline-light btn-sm">Entrar</a>
+            <a sec:authorize="isAnonymous()" href="/cadastro" class="btn btn-warning btn-sm fw-bold">Cadastrar</a>
+            <a sec:authorize="hasRole('CLIENTE')" href="/cliente/meus-pedidos" class="btn btn-outline-light btn-sm">Meus Pedidos</a>
+            <a sec:authorize="hasAnyRole('ATENDENTE','ADMIN')" href="/painel/pedidos" class="btn btn-warning btn-sm fw-bold">Painel Loja</a>
+            <a sec:authorize="hasRole('ADMIN')" href="/admin/produtos" class="btn btn-light btn-sm">Admin</a>
+            <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post" class="d-inline">
+                <button class="btn btn-danger btn-sm">Sair</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<div class="container my-4">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-dark">Monte seu Açaí ou Milkshake</h2>
+        <p class="text-muted mb-1">Escolha o tamanho, cremes grátis (até 2), coberturas grátis (até 2) e seus adicionais inclusos!</p>
+        <small class="text-secondary">Excedentes além da cota do copo: +R$ 1,00 por adicional seco | +R$ 2,00 por fruta extra</small>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4" th:each="prod : ${produtos}">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="card-title fw-bold mb-0" th:text="${prod.nome}">Açaí 300ml</h5>
+                        <span class="badge bg-roxo" th:text="${prod.tamanho}">300ml</span>
+                    </div>
+                    <p class="card-text text-muted small flex-grow-1" th:text="${prod.descricao}">Descrição</p>
+                    <h4 class="text-success fw-bold mb-3">
+                        R$ <span th:text="${#numbers.formatDecimal(prod.preco, 1, 'COMMA', 2, 'POINT')}">14,00</span>
+                    </h4>
+
+                    <button sec:authorize="isAuthenticated()" type="button" class="btn btn-roxo w-100 fw-bold"
+                            th:data-id="${prod.id}"
+                            th:data-nome="${prod.nome}"
+                            th:data-preco="${prod.preco}"
+                            onclick="abrirModalPedido(this)">
+                        Montar Pedido
+                    </button>
+                    <a sec:authorize="isAnonymous()" href="/login" class="btn btn-outline-secondary w-100">
+                        Faça login para pedir
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Montar Pedido -->
+<div class="modal fade" id="modalPedido" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form th:action="@{/cliente/finalizar-pedido}" method="post" class="modal-content">
+            <div class="modal-header bg-roxo text-white">
+                <h5 class="modal-title" id="modalTitulo">Montar Pedido</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="produtoId" id="inputProdutoId">
+
+                <div id="avisoProteico" class="alert alert-warning py-2 small d-none">
+                    💪 <strong>Açaí Proteico:</strong> Já inclui <strong>Whey Protein</strong> obrigatoriamente + 4 adicionais/frutas grátis à sua escolha!
+                </div>
+
+                <div id="avisoMilkshake" class="alert alert-info py-2 small d-none">
+                    🥤 <strong>Milkshake 400ml:</strong> Selecione <strong>1 Creme</strong> abaixo para o sabor do seu milkshake (ou deixe sem creme para sabor Açaí).
+                </div>
+
+                <div class="row g-3 mb-3 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Quantidade</label>
+                        <input type="number" name="quantidade" id="inputQtd" value="1" min="1" class="form-control" onchange="calcularTotal()">
+                    </div>
+                    <div class="col-md-8">
+                        <div class="p-2 rounded badge-cota small">
+                            <div>🎁 <strong>Cota grátis de Frutas/Adicionais:</strong> <span id="infoCota">0</span> itens</div>
+                            <div>🍨 <strong>Cremes grátis:</strong> <span id="infoCremes">0</span>/2 | 🍫 <strong>Coberturas grátis:</strong> <span id="infoCoberturas">0</span>/2</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="fw-bold text-primary border-bottom pb-1">🍨 Cremes / Sorvetes Grátis (Escolha até 2)</h6>
+                    <div class="row g-2" id="grupoCremes"></div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="fw-bold text-primary border-bottom pb-1">🍫 Coberturas Grátis (Escolha até 2)</h6>
+                    <div class="row g-2" id="grupoCoberturas"></div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="fw-bold text-danger border-bottom pb-1">⭐ Cremes & Coberturas Especiais (Acréscimo fixo)</h6>
+                    <div class="row g-2" id="grupoExtras"></div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="fw-bold text-success border-bottom pb-1">🍓 Frutas (Contam na cota grátis | Extra: +R$ 2,00)</h6>
+                    <div class="row g-2" id="grupoFrutas"></div>
+                </div>
+
+                <div class="mb-3">
+                    <h6 class="fw-bold text-dark border-bottom pb-1">🥜 Adicionais & Complementos (Contam na cota grátis | Extra: +R$ 1,00)</h6>
+                    <div class="row g-2" id="grupoAdicionais"></div>
+                </div>
+
+                <div id="todosAdicionaisData" class="d-none">
+                    <div th:each="ad : ${adicionais}"
+                         th:data-id="${ad.id}"
+                         th:data-nome="${ad.nome}"
+                         th:data-preco="${ad.preco}">
+                    </div>
+                </div>
+
+                <hr>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Forma de Pagamento</label>
+                        <select name="formaPagamento" class="form-select" required>
+                            <option value="Pix">Pix</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão">Cartão (Crédito/Débito)</option>
+                            <option value="Pagamento Dividido">Pagamento Dividido</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Troco / Detalhes / Sabor Milkshake</label>
+                        <input type="text" name="detalhesPagamento" class="form-control" placeholder="Ex: Troco para R$ 50 ou R$ 10 Pix + R$ 4 Dinheiro">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Endereço de Entrega (ou Retirada)</label>
+                        <input type="text" name="enderecoEntrega" class="form-control" placeholder="Rua, número, bairro, ponto de referência..." required>
+                    </div>
+                </div>
+
+                <div class="alert alert-success mt-3 mb-0 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Valor Total Estimado:</span>
+                    <span class="fs-4 fw-bold" id="textoTotal">R$ 0,00</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-success fw-bold">Confirmar e Enviar no WhatsApp</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let precoBaseAtual = 0;
+    let cotaGratisAtual = 0;
+    let ehMilkshake = false;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const itens = document.querySelectorAll("#todosAdicionaisData > div");
+        itens.forEach(el => {
+            const id = el.dataset.id;
+            const nomeCompleto = el.dataset.nome;
+            const preco = el.dataset.preco;
+
+            let targetId = "grupoAdicionais";
+            let tipo = "adicional";
+            if (nomeCompleto.startsWith("[Creme]")) { targetId = "grupoCremes"; tipo = "creme"; }
+            else if (nomeCompleto.startsWith("[Cobertura]")) { targetId = "grupoCoberturas"; tipo = "cobertura"; }
+            else if (nomeCompleto.startsWith("[Extra]")) { targetId = "grupoExtras"; tipo = "extra"; }
+            else if (nomeCompleto.startsWith("[Fruta]")) { targetId = "grupoFrutas"; tipo = "fruta"; }
+
+            const nomeLimpo = nomeCompleto.replace(/^\[.*?\]\s*/, "");
+            const col = document.createElement("div");
+            col.className = "col-6 col-md-4";
+            col.innerHTML = `
+                <div class="form-check">
+                    <input class="form-check-input check-adicional" type="checkbox" name="adicionaisIds"
+                           value="${id}" data-preco="${preco}" data-tipo="${tipo}" id="ad_${id}" onchange="validarECalcular(this)">
+                    <label class="form-check-label small" for="ad_${id}">${nomeLimpo}</label>
+                </div>`;
+            document.getElementById(targetId).appendChild(col);
+        });
+    });
+
+    function abrirModalPedido(btn) {
+        const nome = btn.dataset.nome;
+        precoBaseAtual = parseFloat(btn.dataset.preco);
+        document.getElementById('inputProdutoId').value = btn.dataset.id;
+        document.getElementById('modalTitulo').innerText = 'Montar: ' + nome;
+        document.getElementById('inputQtd').value = 1;
+
+        document.querySelectorAll('.check-adicional').forEach(cb => cb.checked = false);
+
+        const nomeLower = nome.toLowerCase();
+        ehMilkshake = nomeLower.includes("milkshake");
+
+        document.getElementById('avisoProteico').classList.toggle('d-none', !nomeLower.includes("proteico"));
+        document.getElementById('avisoMilkshake').classList.toggle('d-none', !ehMilkshake);
+
+        if (ehMilkshake) cotaGratisAtual = 0;
+        else if (nomeLower.includes("200")) cotaGratisAtual = 3;
+        else if (nomeLower.includes("300")) cotaGratisAtual = 4;
+        else if (nomeLower.includes("500")) cotaGratisAtual = 5;
+        else if (nomeLower.includes("1 litro") || nomeLower.includes("1000")) cotaGratisAtual = 8;
+        else cotaGratisAtual = 0;
+
+        calcularTotal();
+        new bootstrap.Modal(document.getElementById('modalPedido')).show();
+    }
+
+    function validarECalcular(checkbox) {
+        const tipo = checkbox.dataset.tipo;
+        if (tipo === "creme") {
+            const maxCremes = ehMilkshake ? 1 : 2;
+            const marcados = document.querySelectorAll('.check-adicional[data-tipo="creme"]:checked');
+            if (marcados.length > maxCremes) {
+                checkbox.checked = false;
+                alert(`Você pode escolher no máximo ${maxCremes} creme(s) para este item.`);
+            }
+        }
+        if (tipo === "cobertura") {
+            const marcados = document.querySelectorAll('.check-adicional[data-tipo="cobertura"]:checked');
+            if (marcados.length > 2) {
+                checkbox.checked = false;
+                alert("Você pode escolher no máximo 2 coberturas grátis por açaí.");
+            }
+        }
+        calcularTotal();
+    }
+
+    function calcularTotal() {
+        const qtd = parseInt(document.getElementById('inputQtd').value) || 1;
+        let somaExtras = 0;
+        let itensCota = [];
+
+        const cremesMarcados = document.querySelectorAll('.check-adicional[data-tipo="creme"]:checked').length;
+        const coberturasMarcadas = document.querySelectorAll('.check-adicional[data-tipo="cobertura"]:checked').length;
+
+        document.querySelectorAll('.check-adicional:checked').forEach(cb => {
+            const tipo = cb.dataset.tipo;
+            const preco = parseFloat(cb.dataset.preco);
+            if (tipo === "extra") {
+                somaExtras += preco;
+            } else if (tipo === "fruta" || tipo === "adicional") {
+                itensCota.push(preco);
+            }
+        });
+
+        itensCota.sort((a, b) => b - a);
+        for (let i = cotaGratisAtual; i < itensCota.length; i++) {
+            somaExtras += itensCota[i];
+        }
+
+        const usadoCota = Math.min(itensCota.length, cotaGratisAtual);
+        document.getElementById('infoCota').innerText = `${usadoCota}/${cotaGratisAtual}`;
+        document.getElementById('infoCremes').innerText = cremesMarcados;
+        document.getElementById('infoCoberturas').innerText = coberturasMarcadas;
+
+        const total = (precoBaseAtual + somaExtras) * qtd;
+        document.getElementById('textoTotal').innerText = 'R$ ' + total.toFixed(2).replace('.', ',');
+    }
+</script>
 </body>
 </html>
